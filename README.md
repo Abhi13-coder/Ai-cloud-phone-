@@ -1,59 +1,392 @@
-<header>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Cloud Phone Dashboard</title>
+  <link rel="manifest" id="manifestLink" href="">
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #121212;
+      color: white;
+      text-align: center;
+      padding: 20px;
+    }
+    .category {
+      margin-bottom: 30px;
+    }
+    .category h2 {
+      margin-bottom: 10px;
+    }
+    .links a {
+      display: inline-block;
+      margin: 10px;
+      padding: 10px 20px;
+      background: #1f1f1f;
+      border-radius: 8px;
+      text-decoration: none;
+      color: #00d8ff;
+    }
+    input, button, select {
+      padding: 10px;
+      margin: 5px;
+      border-radius: 6px;
+      border: none;
+    }
+    #exportBtn, #importInput {
+      margin-top: 20px;
+    }
+    #loginForm, #registerForm {
+      display: none;
+    }
+    #geminiSection {
+      margin-top: 30px;
+    }
+    #geminiResponse {
+      margin-top: 10px;
+      padding: 15px;
+      background: #1f1f1f;
+      border-radius: 8px;
+      text-align: left;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <h1>Cloud Phone Dashboard</h1>
 
-<!--
-  <<< Author notes: Course header >>>
-  Include a 1280×640 image, course title in sentence case, and a concise description in emphasis.
-  In your repository settings: enable template repository, add your 1280×640 social image, auto delete head branches.
-  Add your open source license, GitHub uses MIT license.
--->
+  <!-- Auth Section -->
+  <div id="authSection">
+    <div id="loginForm">
+      <h2>Login</h2>
+      <input id="loginUser" placeholder="Username" />
+      <input id="loginPass" placeholder="Password" type="password" />
+      <button onclick="login()">Login</button>
+      <p>Don't have an account? <a href="#" onclick="showRegister()">Register</a></p>
+    </div>
+    <div id="registerForm">
+      <h2>Register</h2>
+      <input id="registerUser" placeholder="Username" />
+      <input id="registerPass" placeholder="Password" type="password" />
+      <button onclick="register()">Register</button>
+      <p>Already have an account? <a href="#" onclick="showLogin()">Login</a></p>
+    </div>
+  </div>
 
-# GitHub Pages
+  <!-- Dashboard -->
+  <div id="dashboard" style="display:none">
+    <h2>Welcome, <span id="userDisplay"></span>!</h2>
+    <button onclick="logout()">Logout</button>
+    <div class="category">
+      <h2>Add Bookmark</h2>
+      <input id="url" placeholder="URL" />
+      <input id="label" placeholder="Label" />
+      <select id="category">
+        <option value="dev">Dev Tools</option>
+        <option value="ai">AI & ML</option>
+        <option value="remote">Remote Access</option>
+        <option value="games">Games</option>
+      </select>
+      <button onclick="addLink()">Save</button>
+    </div>
+    <div class="category">
+      <h2>Backup</h2>
+      <button id="exportBtn" onclick="exportLinks()">Export All</button>
+      <input type="file" id="importInput" accept=".json" onchange="importLinks(event)" />
+    </div>
+    <div class="category" id="dev">
+      <h2>Dev Tools</h2>
+      <div class="links" id="dev-links"></div>
+    </div>
+    <div class="category" id="ai">
+      <h2>AI & ML</h2>
+      <div class="links" id="ai-links"></div>
+    </div>
+    <div class="category" id="remote">
+      <h2>Remote Access</h2>
+      <div class="links" id="remote-links"></div>
+    </div>
+    <div class="category" id="games">
+      <h2>Games</h2>
+      <div class="links" id="game-links"></div>
+    </div>
+    <div class="category" id="geminiSection">
+      <h2>Gemini AI Interaction</h2>
+      <input id="geminiPrompt" placeholder="Ask Gemini anything..." style="width: 80%;" />
+      <button onclick="askGemini()">Ask</button>
+      <div id="geminiResponse"></div>
+    </div>
+  </div>
 
-_Create a site or blog from your GitHub repositories with GitHub Pages._
+  <!-- Scripts -->
+  <script>
+    const DB_NAME = 'cloudphone_users';
+    const STORE_USERS = 'users';
+    const STORE_BOOKMARKS = 'bookmarks';
+    let db;
+    let currentUser = null;
+    const geminiApiKey = 'AIzaSyB0aZpI1YjeLXERCF2i6BM4mD74pEQxMZI';
 
-</header>
+    function openDB() {
+      const request = indexedDB.open(DB_NAME, 1);
+      request.onupgradeneeded = function(event) {
+        db = event.target.result;
+        if (!db.objectStoreNames.contains(STORE_USERS)) {
+          db.createObjectStore(STORE_USERS, { keyPath: 'username' });
+        }
+        if (!db.objectStoreNames.contains(STORE_BOOKMARKS)) {
+          db.createObjectStore(STORE_BOOKMARKS, { keyPath: 'id', autoIncrement: true });
+        }
+      };
+      request.onsuccess = function(event) {
+        db = event.target.result;
+        showLogin();
+      };
+    }
+    openDB();
 
-<!--
-  <<< Author notes: Step 2 >>>
-  Start this step by acknowledging the previous step.
-  Define terms and link to docs.github.com.
-  Historic note: previous version checked for empty pull request, changed to the correct theme `minima`.
--->
+    function showLogin() {
+      document.getElementById('loginForm').style.display = 'block';
+      document.getElementById('registerForm').style.display = 'none';
+    }
 
-## Step 2: Configure your site
+    function showRegister() {
+      document.getElementById('loginForm').style.display = 'none';
+      document.getElementById('registerForm').style.display = 'block';
+    }
 
-_You turned on GitHub Pages! :tada:_
+    function register() {
+      const user = document.getElementById('registerUser').value;
+      const pass = document.getElementById('registerPass').value;
+      const tx = db.transaction(STORE_USERS, 'readwrite');
+      const store = tx.objectStore(STORE_USERS);
+      store.get(user).onsuccess = (e) => {
+        if (e.target.result) {
+          alert('Username already exists');
+        } else {
+          store.put({ username: user, password: pass });
+          alert('Registered! You can now login.');
+          showLogin();
+        }
+      }
+    }
 
-We'll work in a branch, `my-pages`, that I created for you to get this site looking great. :sparkle:
+    function login() {
+      const user = document.getElementById('loginUser').value;
+      const pass = document.getElementById('loginPass').value;
+      const tx = db.transaction(STORE_USERS, 'readonly');
+      const store = tx.objectStore(STORE_USERS);
+      store.get(user).onsuccess = (e) => {
+        const data = e.target.result;
+        if (data && data.password === pass) {
+          currentUser = user;
+          document.getElementById('userDisplay').textContent = user;
+          document.getElementById('authSection').style.display = 'none';
+          document.getElementById('dashboard').style.display = 'block';
+          loadLinks();
+        } else {
+          alert('Invalid credentials');
+        }
+      }
+    }
 
-Jekyll uses a file titled `_config.yml` to store settings for your site, your theme, and reusable content like your site title and GitHub handle. You can check out the `_config.yml` file on the **Code** tab of your repository.
+    function logout() {
+      currentUser = null;
+      document.getElementById('dashboard').style.display = 'none';
+      document.getElementById('authSection').style.display = 'block';
+      showLogin();
+    }
 
-We need to use a blog-ready theme. For this activity, we will use a theme named "minima".
+    function saveLink(link) {
+      link.user = currentUser;
+      const tx = db.transaction(STORE_BOOKMARKS, 'readwrite');
+      const store = tx.objectStore(STORE_BOOKMARKS);
+      store.add(link);
+      tx.oncomplete = () => loadLinks();
+    }
 
-### :keyboard: Activity: Configure your site
+    function deleteLink(id) {
+      const tx = db.transaction(STORE_BOOKMARKS, 'readwrite');
+      const store = tx.objectStore(STORE_BOOKMARKS);
+      store.delete(id);
+      tx.oncomplete = () => loadLinks();
+    }
 
-1. Browse to the `_config.yml` file in the `my-pages` branch.
-1. In the upper right corner, open the file editor.
-1. Add a `theme:` set to **minima** so it shows in the `_config.yml` file as below:
-   ```yml
-   theme: minima
-   ```
-1. (optional) You can modify the other configuration variables such as `title:`, `author:`, and `description:` to further customize your site.
-1. Commit your changes.
-1. (optional) Create a pull request to view all the changes you'll make throughout this course. Click the **Pull Requests** tab, click **New pull request**, set `base: main` and `compare:my-pages`.
-1. Wait about 20 seconds then refresh this page (the one you're following instructions from). [GitHub Actions](https://docs.github.com/en/actions) will automatically update to the next step.
+    function loadLinks() {
+      const tx = db.transaction(STORE_BOOKMARKS, 'readonly');
+      const store = tx.objectStore(STORE_BOOKMARKS);
+      const request = store.getAll();
+      request.onsuccess = function(event) {
+        const links = event.target.result.filter(link => link.user === currentUser);
+        renderLinks(links);
+      };
+    }
 
-<footer>
+    function addLink() {
+      const url = document.getElementById('url').value;
+      const label = document.getElementById('label').value;
+      const category = document.getElementById('category').value;
+      if (!url || !label) return alert("Fill URL and Label");
+      saveLink({ url, label, category });
+      document.getElementById('url').value = '';
+      document.getElementById('label').value = '';
+    }
 
-<!--
-  <<< Author notes: Footer >>>
-  Add a link to get support, GitHub status page, code of conduct, license link.
--->
+    function renderLinks(links) {
+      const containers = {
+        dev: document.getElementById('dev-links'),
+        ai: document.getElementById('ai-links'),
+        remote: document.getElementById('remote-links'),
+        games: document.getElementById('game-links')
+      };
+      Object.values(containers).forEach(container => container.innerHTML = '');
+      links.forEach(link => {
+        const container = containers[link.category];
+        if (!container) return;
+        const a = document.createElement('a');
+        a.href = link.url.startsWith('http') ? link.url : `https://${link.url}`;
+        a.target = "_blank";
+        a.textContent = link.label;
+        const del = document.createElement('button');
+        del.textContent = "🗑️";
+        del.onclick = () => deleteLink(link.id);
+        const div = document.createElement('div');
+        div.appendChild(a);
+        div.appendChild(del);
+        container.appendChild(div);
+      });
+    }
 
----
+    function exportLinks() {
+      const tx = db.transaction(STORE_BOOKMARKS, 'readonly');
+      const store = tx.objectStore(STORE_BOOKMARKS);
+      const getAll = store.getAll();
+      getAll.onsuccess = function() {
+        const data = getAll.result.filter(link => link.user === currentUser);
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `${currentUser}_bookmarks.json`;
+        a.click();
+      };
+    }
 
-Get help: [Post in our discussion board](https://github.com/orgs/skills/discussions/categories/github-pages) &bull; [Review the GitHub status page](https://www.githubstatus.com/)
+    function importLinks(event) {
+      const file = event.target.files[0];
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const links = JSON.parse(e.target.result).map(link => ({ ...link, user: currentUser }));
+        const tx = db.transaction(STORE_BOOKMARKS, 'readwrite');
+        const store = tx.objectStore(STORE_BOOKMARKS);
+        links.forEach(link => store.add(link));
+        tx.oncomplete = () => loadLinks();
+      };
+      reader.readAsText(file);
+    }
 
-&copy; 2023 GitHub &bull; [Code of Conduct](https://www.contributor-covenant.org/version/2/1/code_of_conduct/code_of_conduct.md) &bull; [MIT License](https://gh.io/mit)
+    async function askGemini() {
+      const prompt = document.getElementById('geminiPrompt').value;
+      const responseDiv = document.getElementById('geminiResponse');
+      responseDiv.textContent = 'Loading...';
+      const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+      let responseData = null;
+      let errorMessage = null;
 
-</footer>
+      for (const modelName of modelsToTry) {
+        try {
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiApiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }]
+            })
+          });
+
+          if (response.ok) {
+            responseData = await response.json();
+            break;
+          } else {
+            const errorData = await response.json();
+            console.error(`Gemini API Error (${modelName}):`, errorData);
+            errorMessage = errorData.error?.message || `Failed to get response from ${modelName}.`;
+          }
+        } catch (error) {
+          console.error(`Error calling Gemini API (${modelName}):`, error);
+          errorMessage = error.message;
+        }
+      }
+
+      if (responseData?.candidates?.[0]?.content?.parts?.[0]?.text) {
+        responseDiv.textContent = responseData.candidates[0].content.parts[0].text;
+      } else {
+        responseDiv.textContent = `Error: Could not get a response from Gemini. ${errorMessage ? `Last error: ${errorMessage}` : ''}`;
+      }
+      document.getElementById('geminiPrompt').value = '';
+    }
+  </script>
+
+  <!-- Manifest Generator -->
+  <script>
+    const manifestContent = `{
+      "name": "Cloud Phone Dashboard",
+      "short_name": "Dashboard",
+      "start_url": ".",
+      "display": "standalone",
+      "background_color": "#121212",
+      "theme_color": "#00d8ff",
+      "icons": [
+        {
+          "src": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d5/Cloud_icon.svg/192px-Cloud_icon.svg.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        },
+        {
+          "src": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d5/Cloud_icon.svg/512px-Cloud_icon.svg.png",
+          "sizes": "512x512",
+          "type": "image/png"
+        }
+      ]
+    }`;
+
+    const link = document.getElementById('manifestLink');
+    if (link) {
+      const blob = new Blob([manifestContent], { type: 'application/json' });
+      link.href = URL.createObjectURL(blob);
+    }
+  </script>
+
+  <!-- Inline Service Worker -->
+  <script type="text/sw-js">
+    const CACHE_NAME = 'cloudphone-dashboard-cache-v1';
+    const urlsToCache = ['/'];
+
+    self.addEventListener('install', event => {
+      event.waitUntil(
+        caches.open(CACHE_NAME)
+          .then(cache => cache.addAll(urlsToCache))
+      );
+    });
+
+    self.addEventListener('fetch', event => {
+      event.respondWith(
+        caches.match(event.request)
+          .then(response => response || fetch(event.request))
+      );
+    });
+  </script>
+
+  <!-- Register Service Worker -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      const swScript = document.querySelector('script[type="text/sw-js"]');
+      const blob = new Blob([swScript.textContent], { type: 'application/javascript' });
+      const swUrl = URL.createObjectURL(blob);
+      navigator.serviceWorker.register(swUrl)
+        .then(reg => console.log('Service Worker registered', reg))
+        .catch(err => console.error('SW registration
+                      failed:',err));
+    }
+  </script>
+</body>
+</html>
